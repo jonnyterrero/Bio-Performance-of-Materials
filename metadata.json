@@ -1,0 +1,6 @@
+{
+  "name": "Graphene Oxide Biocompatibility Presentation",
+  "description": "Clean, polished academic presentation and PowerPoint generator for FGCU BME3101C research article on Graphene Oxide Biocompatibility.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
