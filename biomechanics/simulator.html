@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biomechanical Joint Torque Simulator</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #333; }
+        .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; align-items: start; }
+        .controls { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6; }
+        canvas { border: 1px solid #dee2e6; border-radius: 8px; width: 100%; height: 400px; background: #fff; }
+        .control-group { margin-bottom: 1.5rem; }
+        label { display: block; font-weight: bold; margin-bottom: 0.5rem; font-size: 0.9rem; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        .val-display { float: right; font-weight: normal; color: #495057; font-family: monospace; font-size: 1rem; }
+        .results { margin-top: 2rem; padding: 1.2rem; background: #e2e3e5; border-radius: 8px; }
+        .result-item { font-size: 1.1rem; margin-bottom: 0.8rem; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem; }
+        .result-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .result-val { font-weight: bold; font-family: monospace; float: right; }
+        .val-torque { color: #dc3545; }
+        .val-force { color: #0056b3; }
+    </style>
+</head>
+<body>
+    <a href="../index.html" style="color:#0ea5e9;font-size:0.85rem;text-decoration:none;">← All courses</a>
+    <h2>Sagittal Plane Knee Joint Simulator</h2>
+    <p>Adjust the segment mass, external load moment arm, and patellar tendon insertion point to observe the required internal muscle force for static equilibrium.</p>
+    
+    <div class="grid">
+        <div class="controls">
+            <div class="control-group">
+                <label>System Mass (kg) <span id="massVal" class="val-display">95.25</span></label>
+                <input type="range" id="mass" min="50" max="200" step="0.25" value="95.25">
+            </div>
+            <div class="control-group">
+                <label>External Moment Arm (m) <span id="loadVal" class="val-display">0.20</span></label>
+                <input type="range" id="load" min="0.05" max="0.40" step="0.01" value="0.20">
+            </div>
+            <div class="control-group">
+                <label>Muscle Insertion (m) <span id="muscleVal" class="val-display">0.050</span></label>
+                <input type="range" id="muscle" min="0.02" max="0.10" step="0.005" value="0.050">
+            </div>
+            <div class="results">
+                <div class="result-item">Ext. Torque <span id="torqueOut" class="result-val val-torque">0 Nm</span></div>
+                <div class="result-item">Muscle Force <span id="forceOut" class="result-val val-force">0 N</span></div>
+            </div>
+        </div>
+        <div>
+            <canvas id="simCanvas" width="600" height="400"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // DOM Elements
+        const inMass = document.getElementById('mass');
+        const inLoad = document.getElementById('load');
+        const inMuscle = document.getElementById('muscle');
+        
+        const valMass = document.getElementById('massVal');
+        const valLoad = document.getElementById('loadVal');
+        const valMuscle = document.getElementById('muscleVal');
+        const outTorque = document.getElementById('torqueOut');
+        const outForce = document.getElementById('forceOut');
+
+        const g = 9.81; // Gravity constant (m/s^2)
+
+        function drawArrow(fromX, fromY, toX, toY, width, color) {
+            const headlen = 12; 
+            const dx = toX - fromX;
+            const dy = toY - fromY;
+            const angle = Math.atan2(dy, dx);
+            
+            ctx.beginPath();
+            ctx.lineWidth = width;
+            ctx.strokeStyle = color;
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.fillStyle = color;
+            ctx.moveTo(toX, toY);
+            ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.fill();
+        }
+
+        function calculateAndRender() {
+            // 1. Retrieve Current State
+            const m = parseFloat(inMass.value);
+            const rLoad = parseFloat(inLoad.value);
+            const rMuscle = parseFloat(inMuscle.value);
+
+            valMass.textContent = m.toFixed(2);
+            valLoad.textContent = rLoad.toFixed(2);
+            valMuscle.textContent = rMuscle.toFixed(3);
+
+            // 2. Kinetics Calculations (ΣTz = 0)
+            const forceExt = m * g;
+            const torqueExt = forceExt * rLoad;
+            
+            // Required muscle force to maintain equilibrium
+            const forceMuscle = torqueExt / rMuscle;
+
+            outTorque.textContent = torqueExt.toFixed(1) + ' Nm';
+            outForce.textContent = forceMuscle.toFixed(0) + ' N';
+
+            // 3. Canvas Rendering
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const originX = 80;
+            const originY = 200;
+            const scaleMetersToPx = 1000; // 1m = 1000px for rendering scale
+            
+            // Draw joint center (fulcrum)
+            ctx.beginPath();
+            ctx.arc(originX, originY, 10, 0, 2 * Math.PI);
+            ctx.fillStyle = '#343a40';
+            ctx.fill();
+
+            // Draw rigid segment (Tibia approximation)
+            ctx.beginPath();
+            ctx.lineWidth = 16;
+            ctx.strokeStyle = '#ced4da';
+            ctx.lineCap = 'round';
+            ctx.moveTo(originX, originY);
+            ctx.lineTo(originX + 0.45 * scaleMetersToPx, originY);
+            ctx.stroke();
+
+            // Draw Muscle Force Vector (Upward, Blue)
+            const muscleX = originX + rMuscle * scaleMetersToPx;
+            // Scale thickness visually based on force output
+            const muscleThickness = Math.min(Math.max(forceMuscle / 400, 3), 20);
+            drawArrow(muscleX, originY + 100, muscleX, originY + 15, muscleThickness, '#0056b3');
+
+            // Draw External Load Vector (Downward, Red)
+            const loadX = originX + rLoad * scaleMetersToPx;
+            drawArrow(loadX, originY - 15, loadX, originY + 100, 6, '#dc3545');
+        }
+
+        // Event Listeners for real-time interaction
+        inMass.addEventListener('input', calculateAndRender);
+        inLoad.addEventListener('input', calculateAndRender);
+        inMuscle.addEventListener('input', calculateAndRender);
+
+        // Initial render
+        calculateAndRender();
+    </script>
+</body>
+</html>

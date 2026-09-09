@@ -12,6 +12,7 @@ Each class is a folder on `main`. Open the folder for that course, then click th
 | [`biofluid-mechanics/`](biofluid-mechanics/) | Biofluid Mechanics — rheology, hydrostatics, capillary rise | [dashboard.html](https://jonnyterrero.github.io/BME-Visualizations/biofluid-mechanics/dashboard.html) |
 | [`medical-instrument-architecture/`](medical-instrument-architecture/) | Medical Instrument Architecture — IEC 60601 signal chain | [architecture.html](https://jonnyterrero.github.io/BME-Visualizations/medical-instrument-architecture/architecture.html) |
 | [`biomedical-signal-models/`](biomedical-signal-models/) | Biomedical Signal Models — loading, linearity, CMRR, noise | [visualizations.html](https://jonnyterrero.github.io/BME-Visualizations/biomedical-signal-models/visualizations.html) |
+| [`biomechanics/`](biomechanics/) | Biomechanics — sagittal-plane knee torque and patellar-tendon force | [simulator.html](https://jonnyterrero.github.io/BME-Visualizations/biomechanics/simulator.html) |
 
 Catalog homepage: [jonnyterrero.github.io/BME-Visualizations](https://jonnyterrero.github.io/BME-Visualizations/)
 
