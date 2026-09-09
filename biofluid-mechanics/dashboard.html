@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biofluid Mechanics Computational Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .tab-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .tab-btn.active {
+            background-color: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* Custom scrollbar for data panels */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex flex-col overflow-hidden">
+
+    <header class="glass-panel w-full p-4 flex justify-between items-center z-10">
+        <div>
+            <a href="../index.html" class="text-xs text-sky-400 hover:text-sky-300">← All courses</a>
+            <h1 class="text-2xl font-bold text-blue-400">Biofluid Mechanics Visualizer</h1>
+            <p class="text-sm text-slate-400">Research-Grade Interactive Models (Navier-Stokes, Laplace, Rheology)</p>
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="switchTab('rheology')" id="btn-rheology" class="tab-btn active px-4 py-2 rounded-md border border-slate-600 text-sm font-semibold">1. Rheology</button>
+            <button onclick="switchTab('pressure')" id="btn-pressure" class="tab-btn px-4 py-2 rounded-md border border-slate-600 text-sm font-semibold">2. Hydrostatics</button>
+            <button onclick="switchTab('capillary')" id="btn-capillary" class="tab-btn px-4 py-2 rounded-md border border-slate-600 text-sm font-semibold">3. Capillary Action</button>
+        </div>
+    </header>
+
+    <main class="flex-grow flex p-6 gap-6 overflow-hidden">
+        
+        <section id="tab-rheology" class="w-full h-full flex flex-col lg:flex-row gap-6 animate-fade-in">
+            <div class="glass-panel p-6 rounded-xl flex-1 flex flex-col">
+                <h2 class="text-xl font-semibold mb-2">Viscosity & Flow Regimes</h2>
+                <p class="text-xs text-slate-400 mb-4">Governing Eq: \(\tau = \mu \dot{\gamma}\) (Newtonian) vs \(\tau = K\dot{\gamma}^n\) (Power Law)</p>
+                <div class="flex-grow relative w-full h-full">
+                    <canvas id="rheologyChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-panel p-6 rounded-xl w-full lg:w-1/3 flex flex-col overflow-y-auto">
+                <h3 class="text-lg font-semibold text-blue-400 border-b border-slate-600 pb-2 mb-4">Analytical Breakdown</h3>
+                <ul class="space-y-4 text-sm text-slate-300">
+                    <li><strong class="text-white">Newtonian Model (Plasma):</strong> Viscosity ($\mu$) is constant regardless of shear rate. Graph shows a linear relationship between shear stress and shear rate.</li>
+                    <li><strong class="text-white">Non-Newtonian (Whole Blood):</strong> Exhibits shear-thinning (pseudoplastic) behavior. At low shear rates, RBCs form rouleaux, increasing apparent viscosity. At high shear rates (large arteries), cells align and viscosity drops.</li>
+                    <li class="bg-blue-900/30 p-3 rounded-lg border border-blue-500/30">
+                        <strong class="text-blue-300">🚨 Fåhræus–Lindqvist Effect:</strong> In microvessels (< 300 $\mu$m), RBCs migrate to the center, creating a cell-free plasma layer at the wall. Apparent viscosity dramatically decreases, violating bulk continuum assumptions.
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="tab-pressure" class="w-full h-full flex flex-col lg:flex-row gap-6 hidden">
+            <div class="glass-panel p-6 rounded-xl flex-1 flex flex-col">
+                <h2 class="text-xl font-semibold mb-2">Arterial Hydrostatic Pressure</h2>
+                <p class="text-xs text-slate-400 mb-4">Governing Eq: \(P_{total} = P_{heart} + \rho g h\)</p>
+                <div class="flex-grow relative w-full h-full">
+                    <canvas id="pressureChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-panel p-6 rounded-xl w-full lg:w-1/3 flex flex-col space-y-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-blue-400 border-b border-slate-600 pb-2 mb-4">Parameters</h3>
+                    <label class="block text-sm mb-1">Fluid Density ($\rho$) [kg/m³]: <span id="val-density">1060</span></label>
+                    <input type="range" id="input-density" min="900" max="1100" value="1060" class="w-full mb-4">
+                    
+                    <label class="block text-sm mb-1">Gravity ($g$) [m/s²]: <span id="val-gravity">9.81</span></label>
+                    <input type="range" id="input-gravity" min="1.6" max="25" step="0.1" value="9.81" class="w-full">
+                </div>
+                <div class="bg-slate-800 p-4 rounded-lg">
+                    <h4 class="font-semibold text-white mb-2">Physiological Consequence</h4>
+                    <p class="text-xs text-slate-300">Gravity significantly influences transmural pressure. When standing, hydrostatic pressure adds up to ~100 mmHg to the baseline mean arterial pressure (MAP) at the feet, forcing the venous system to utilize one-way valves and the skeletal muscle pump to return blood to the right atrium.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-capillary" class="w-full h-full flex flex-col lg:flex-row gap-6 hidden">
+            <div class="glass-panel p-6 rounded-xl flex-1 flex flex-col items-center justify-center relative">
+                <h2 class="text-xl font-semibold mb-2 absolute top-6 left-6">Jurin's Law: Capillary Rise</h2>
+                <div class="relative w-64 h-96 border-b-4 border-slate-500 mt-10 flex justify-center items-end">
+                    <!-- Beaker liquid -->
+                    <div class="absolute bottom-0 w-full h-16 bg-blue-500/30"></div>
+                    <!-- Capillary Tube -->
+                    <div id="cap-tube" class="relative border-x-2 border-white/50 bg-blue-500/10 h-[300px] transition-all duration-500 flex items-end">
+                        <div id="cap-liquid" class="w-full bg-blue-400/80 transition-all duration-500" style="height: 50px;"></div>
+                    </div>
+                </div>
+                <p id="cap-result" class="mt-8 text-2xl font-mono font-bold text-blue-300">h = 0.00 mm</p>
+            </div>
+            <div class="glass-panel p-6 rounded-xl w-full lg:w-1/3 flex flex-col space-y-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-blue-400 border-b border-slate-600 pb-2 mb-4">System Variables</h3>
+                    
+                    <label class="block text-sm mb-1">Surface Tension ($\sigma$) [N/m]: <span id="val-sigma">0.0728</span></label>
+                    <input type="range" id="input-sigma" min="0.02" max="0.1" step="0.001" value="0.0728" class="w-full mb-4">
+                    
+                    <label class="block text-sm mb-1">Tube Radius ($R$) [mm]: <span id="val-radius">1.0</span></label>
+                    <input type="range" id="input-radius" min="0.1" max="5.0" step="0.1" value="1.0" class="w-full mb-4">
+
+                    <label class="block text-sm mb-1">Contact Angle ($\theta$) [deg]: <span id="val-theta">0</span></label>
+                    <input type="range" id="input-theta" min="0" max="140" step="1" value="0" class="w-full mb-4">
+                </div>
+                <div class="bg-slate-800 p-4 rounded-lg text-xs text-slate-300">
+                    <p class="mb-2"><strong>Governing Eq:</strong> $h = \frac{2\sigma\cos\theta}{\rho g R}$</p>
+                    <p>At the microscale (e.g., organ-on-a-chip, alveoli), interfacial forces dominate over inertial forces (Capillary Number, $Ca < 1$). Surfactants lower $\sigma$, directly preventing lung alveolar collapse.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Global Chart Instances
+        let rheologyChartInstance = null;
+        let pressureChartInstance = null;
+
+        function switchTab(tabId) {
+            document.querySelectorAll('section').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`btn-${tabId}`).classList.add('active');
+
+            // Render charts if they become visible
+            if (tabId === 'rheology') renderRheologyChart();
+            if (tabId === 'pressure') updatePressureChart();
+        }
+
+        function renderRheologyChart() {
+            const ctx = document.getElementById('rheologyChart').getContext('2d');
+            if (rheologyChartInstance) rheologyChartInstance.destroy();
+
+            // Generate data points
+            const shearRates = Array.from({length: 100}, (_, i) => i * 2); // 0 to 200 s^-1
+            
+            // Plasma: Newtonian (Tau = mu * gamma) - mu approx 0.0012 Pa.s
+            const plasmaStress = shearRates.map(gamma => 0.0012 * gamma * 1000); // Scaled for visibility
+            
+            // Whole Blood: Casson or Power Law (Tau = K * gamma^n) - n approx 0.8 (shear thinning)
+            const bloodStress = shearRates.map(gamma => 0.004 * Math.pow(gamma, 0.8) * 1000);
+
+            rheologyChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: shearRates,
+                    datasets: [
+                        {
+                            label: 'Blood Plasma (Newtonian)',
+                            data: plasmaStress,
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Whole Blood (Shear-Thinning)',
+                            data: bloodStress,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    color: '#cbd5e1',
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Shear Rate, γ̇ (1/s)', color: '#94a3b8' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Shear Stress, τ (Scaled Pa)', color: '#94a3b8' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1' } }
+                    }
+                }
+            });
+        }
+
+        function updatePressureChart() {
+            const ctx = document.getElementById('pressureChart').getContext('2d');
+            
+            const rho = parseFloat(document.getElementById('input-density').value);
+            const g = parseFloat(document.getElementById('input-gravity').value);
+            
+            // Update labels
+            document.getElementById('val-density').innerText = rho;
+            document.getElementById('val-gravity').innerText = g;
+
+            // Generate data (0m to 1.5m depth)
+            const depths = Array.from({length: 16}, (_, i) => (i * 0.1).toFixed(1));
+            
+            // P = P_heart + (rho * g * h)
+            // Note: 1 Pascal = 0.0075 mmHg. Heart MAP = 100 mmHg.
+            const mapHeart = 100;
+            const pressures = depths.map(h => mapHeart + (rho * g * h * 0.00750062));
+
+            if (pressureChartInstance) {
+                pressureChartInstance.data.datasets[0].data = pressures;
+                pressureChartInstance.update();
+                return;
+            }
+
+            pressureChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: depths,
+                    datasets: [{
+                        label: 'Total Arterial Pressure (mmHg)',
+                        data: pressures,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    color: '#cbd5e1',
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Distance below heart, h (m)', color: '#94a3b8' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Pressure, P (mmHg)', color: '#94a3b8' },
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            min: 80
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1' } }
+                    }
+                }
+            });
+        }
+
+        // Add event listeners for Pressure
+        document.getElementById('input-density').addEventListener('input', updatePressureChart);
+        document.getElementById('input-gravity').addEventListener('input', updatePressureChart);
+
+        function updateCapillary() {
+            const sigma = parseFloat(document.getElementById('input-sigma').value);
+            const r_mm = parseFloat(document.getElementById('input-radius').value);
+            const theta_deg = parseFloat(document.getElementById('input-theta').value);
+            
+            // Update UI labels
+            document.getElementById('val-sigma').innerText = sigma.toFixed(4);
+            document.getElementById('val-radius').innerText = r_mm.toFixed(1);
+            document.getElementById('val-theta').innerText = theta_deg;
+
+            // Physics constants
+            const rho = 1000; // kg/m^3 (Water)
+            const g = 9.81; // m/s^2
+            const r_m = r_mm / 1000; // convert to meters
+            const theta_rad = theta_deg * (Math.PI / 180);
+
+            // Jurin's Law: h = (2 * sigma * cos(theta)) / (rho * g * R)
+            let h_m = (2 * sigma * Math.cos(theta_rad)) / (rho * g * r_m);
+            let h_mm = h_m * 1000;
+
+            // Cap the visual height for the animation (css representation)
+            // Let's map 0 - 30mm to 0 - 300px
+            let visualHeight = Math.max(0, Math.min(300, h_mm * 10)); 
+            if (h_mm < 0) visualHeight = 0; // Capillary depression (mercury-style)
+
+            // Update UI Visuals
+            document.getElementById('cap-result').innerText = `h = ${h_mm.toFixed(2)} mm`;
+            document.getElementById('cap-liquid').style.height = `${visualHeight}px`;
+            
+            // Change tube width based on radius slider
+            let visualWidth = r_mm * 20; 
+            document.getElementById('cap-tube').style.width = `${visualWidth}px`;
+        }
+
+        // Add event listeners for Capillary
+        document.getElementById('input-sigma').addEventListener('input', updateCapillary);
+        document.getElementById('input-radius').addEventListener('input', updateCapillary);
+        document.getElementById('input-theta').addEventListener('input', updateCapillary);
+
+        window.onload = () => {
+            renderRheologyChart();
+            updateCapillary();
+        };
+    </script>
+</body>
+</html>

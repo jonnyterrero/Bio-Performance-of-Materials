@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biomedical Signal Models</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } }
+        };
+    </script>
+    <style>
+        body { background: #0f172a; color: #e2e8f0; }
+        .glass {
+            background: rgba(30, 41, 59, 0.72);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        input[type=range] { accent-color: #38bdf8; }
+    </style>
+</head>
+<body class="min-h-screen font-sans p-4 sm:p-8">
+    <div class="max-w-6xl mx-auto">
+        <a href="../index.html" class="text-sm text-sky-400 hover:text-sky-300">← All courses</a>
+        <header class="mt-4 mb-8">
+            <p class="text-violet-400 text-sm font-semibold uppercase tracking-wide">Biomedical Instrumentation</p>
+            <h1 class="text-3xl md:text-4xl font-bold text-white mt-1">System Constraints and Models</h1>
+            <p class="text-slate-400 mt-3 max-w-3xl">
+                Browser port of the Webster / Northrop four-panel figure. Drag the sliders — the same equations as
+                <code class="text-violet-300">biomedical_signal_models_visualizations.py</code> update live.
+            </p>
+        </header>
+
+        <div class="grid lg:grid-cols-2 gap-6">
+            <section class="glass rounded-2xl p-5">
+                <h2 class="font-bold text-white">1. Skin-electrode source loading</h2>
+                <p class="text-xs text-slate-400 mb-3">\(V_{measured}=V_{bio}\,Z_{in}/(Z_{in}+Z_{skin})\), \(Z_{skin}=100\,\mathrm{k}\Omega\)</p>
+                <label class="text-xs text-slate-300">Amplifier \(Z_{in}\): <span id="zin-val">10 MΩ</span></label>
+                <input id="zin" type="range" min="3" max="8" step="0.1" value="7" class="w-full mb-3">
+                <div class="h-64"><canvas id="ecgChart"></canvas></div>
+            </section>
+
+            <section class="glass rounded-2xl p-5">
+                <h2 class="font-bold text-white">2. Linear vs nonlinear transduction</h2>
+                <p class="text-xs text-slate-400 mb-3">Thermistor \(R(T)=R_0 e^{\beta(1/T-1/T_0)}\) vs strain-gauge \(V \propto P\)</p>
+                <div class="h-72"><canvas id="sensorChart"></canvas></div>
+            </section>
+
+            <section class="glass rounded-2xl p-5">
+                <h2 class="font-bold text-white">3. InAmp 60 Hz common-mode rejection</h2>
+                <p class="text-xs text-slate-400 mb-3">\(A_d=1000\), \(V_{cm}=100\,\mathrm{mV}\) at 60 Hz, \(\mathrm{CMRR}_{dB}=20\log_{10}|A_d/A_{cm}|\)</p>
+                <label class="text-xs text-slate-300">CMRR: <span id="cmrr-val">80 dB</span></label>
+                <input id="cmrr" type="range" min="40" max="120" step="1" value="80" class="w-full mb-3">
+                <div class="h-64"><canvas id="cmrrChart"></canvas></div>
+            </section>
+
+            <section class="glass rounded-2xl p-5">
+                <h2 class="font-bold text-white">4. Johnson (thermal) noise floor</h2>
+                <p class="text-xs text-slate-400 mb-3">\(V_{n,rms}=\sqrt{4 k_B T R \Delta f}\)</p>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="text-xs text-slate-300">T: <span id="temp-val">300 K</span></label>
+                        <input id="temp" type="range" min="273" max="330" step="1" value="300" class="w-full">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-300">Δf: <span id="bw-val">500 Hz</span></label>
+                        <input id="bw" type="range" min="50" max="2000" step="10" value="500" class="w-full">
+                    </div>
+                </div>
+                <p id="micro-note" class="text-xs text-violet-300 mb-2"></p>
+                <div class="h-64"><canvas id="noiseChart"></canvas></div>
+            </section>
+        </div>
+
+        <p class="text-xs text-slate-500 mt-8 mb-6">
+            References: Webster, <em>Medical Instrumentation: Application and Design</em>;
+            Northrop, <em>Analysis and Application of Analog Electronic Circuits in Biomedical Engineering</em>.
+        </p>
+    </div>
+
+    <script>
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = 'Inter';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+
+        const fs = 1000;
+        const t = Array.from({ length: 1000 }, (_, i) => i / fs);
+
+        function syntheticEcg() {
+            const waves = [
+                [0.15e-3, 0.2, 0.02],
+                [-0.1e-3, 0.35, 0.01],
+                [1.0e-3, 0.37, 0.015],
+                [-0.2e-3, 0.40, 0.015],
+                [0.3e-3, 0.55, 0.04]
+            ];
+            return t.map(ti => waves.reduce((sum, [amp, c, w]) => sum + amp * Math.exp(-0.5 * ((ti - c) / w) ** 2), 0));
+        }
+        const Vbio = syntheticEcg();
+        const Zskin = 100e3;
+
+        function formatZin(log10z) {
+            const z = 10 ** log10z;
+            return z >= 1e6 ? `${(z / 1e6).toFixed(1)} MΩ` : `${(z / 1e3).toFixed(0)} kΩ`;
+        }
+
+        const ecgChart = new Chart(document.getElementById('ecgChart'), {
+            type: 'line',
+            data: {
+                labels: t,
+                datasets: [
+                    { label: 'True V_bio', data: Vbio.map(v => v * 1000), borderColor: '#64748b', borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 },
+                    { label: 'High Zin (10 MΩ)', data: [], borderColor: '#34d399', pointRadius: 0, borderWidth: 2 },
+                    { label: 'Selected Zin', data: [], borderColor: '#f87171', pointRadius: 0, borderWidth: 2 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { title: { display: true, text: 'Time (s)' }, ticks: { maxTicksLimit: 6 } },
+                    y: { title: { display: true, text: 'Amplitude (mV)' } }
+                },
+                plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } }
+            }
+        });
+
+        function updateEcg() {
+            const logZ = parseFloat(document.getElementById('zin').value);
+            const Zin = 10 ** logZ;
+            document.getElementById('zin-val').textContent = formatZin(logZ);
+            const ZinGood = 10e6;
+            const measured = (z) => Vbio.map(v => v * (z / (z + Zskin)) * 1000);
+            ecgChart.data.datasets[1].data = measured(ZinGood);
+            ecgChart.data.datasets[2].data = measured(Zin);
+            ecgChart.data.datasets[2].label = `Selected Zin (${formatZin(logZ)})`;
+            ecgChart.update();
+        }
+
+        const T_c = Array.from({ length: 100 }, (_, i) => 20 + i * 0.3);
+        const T0 = 25 + 273.15, R0 = 10e3, beta = 3900;
+        const Rtherm = T_c.map(c => R0 * Math.exp(beta * (1 / (c + 273.15) - 1 / T0)) / 1000);
+        const P = Array.from({ length: 100 }, (_, i) => i * 3);
+        const Vstrain = P.map(p => 5e-6 * p * 10 * 1000);
+
+        new Chart(document.getElementById('sensorChart'), {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: 'Thermistor R(T) [kΩ]',
+                        data: T_c.map((c, i) => ({ x: c, y: Rtherm[i] })),
+                        borderColor: '#f87171',
+                        backgroundColor: '#f87171',
+                        showLine: true,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                        xAxisID: 'x',
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Strain gauge V(P) [mV]',
+                        data: P.map((p, i) => ({ x: p, y: Vstrain[i] })),
+                        borderColor: '#60a5fa',
+                        backgroundColor: '#60a5fa',
+                        showLine: true,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                        xAxisID: 'x1',
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'linear', title: { display: true, text: 'Temperature (°C)', color: '#f87171' }, ticks: { color: '#f87171' } },
+                    x1: { type: 'linear', position: 'top', min: 0, max: 300, title: { display: true, text: 'Pressure (mmHg)', color: '#60a5fa' }, ticks: { color: '#60a5fa' }, grid: { drawOnChartArea: false } },
+                    y: { title: { display: true, text: 'Resistance (kΩ)', color: '#f87171' }, ticks: { color: '#f87171' } },
+                    y1: { position: 'right', title: { display: true, text: 'Output (mV)', color: '#60a5fa' }, ticks: { color: '#60a5fa' }, grid: { drawOnChartArea: false } }
+                },
+                plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } }
+            }
+        });
+
+        const Ad = 1000;
+        const cmrrChart = new Chart(document.getElementById('cmrrChart'), {
+            type: 'line',
+            data: {
+                labels: t,
+                datasets: [
+                    { label: 'Real InAmp', data: [], borderColor: '#f87171', pointRadius: 0, borderWidth: 1.5 },
+                    { label: 'Ideal (CMRR = ∞)', data: Vbio.map(v => Ad * v), borderColor: '#e2e8f0', pointRadius: 0, borderWidth: 2 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { title: { display: true, text: 'Time (s)' }, ticks: { maxTicksLimit: 6 } },
+                    y: { title: { display: true, text: 'Output voltage (V)' } }
+                },
+                plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } }
+            }
+        });
+
+        function updateCmrr() {
+            const cmrrDb = parseFloat(document.getElementById('cmrr').value);
+            document.getElementById('cmrr-val').textContent = `${cmrrDb} dB`;
+            const Acm = Ad / (10 ** (cmrrDb / 20));
+            const Vcm = t.map(ti => 100e-3 * Math.sin(2 * Math.PI * 60 * ti));
+            cmrrChart.data.datasets[0].data = t.map((_, i) => Ad * Vbio[i] + Acm * Vcm[i]);
+            cmrrChart.data.datasets[0].label = `Real InAmp (CMRR = ${cmrrDb} dB)`;
+            cmrrChart.update();
+        }
+
+        const kB = 1.38e-23;
+        const Rlog = Array.from({ length: 100 }, (_, i) => 3 + i * 0.05);
+        const noiseChart = new Chart(document.getElementById('noiseChart'), {
+            type: 'line',
+            data: {
+                labels: Rlog.map(x => 10 ** x),
+                datasets: [
+                    { label: 'Vn,rms', data: [], borderColor: '#c084fc', pointRadius: 0, borderWidth: 2 },
+                    { label: '10 MΩ microelectrode', data: [], borderColor: '#f8fafc', pointRadius: 5, showLine: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { type: 'logarithmic', title: { display: true, text: 'Electrode source resistance R (Ω)' } },
+                    y: { type: 'logarithmic', title: { display: true, text: 'RMS noise (μV)' } }
+                },
+                plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } }
+            }
+        });
+
+        function updateNoise() {
+            const T = parseFloat(document.getElementById('temp').value);
+            const df = parseFloat(document.getElementById('bw').value);
+            document.getElementById('temp-val').textContent = `${T} K`;
+            document.getElementById('bw-val').textContent = `${df} Hz`;
+            const vn = Rlog.map(x => Math.sqrt(4 * kB * T * (10 ** x) * df) * 1e6);
+            const Rmicro = 10e6;
+            const Vmicro = Math.sqrt(4 * kB * T * Rmicro * df) * 1e6;
+            noiseChart.data.datasets[0].data = vn;
+            noiseChart.data.datasets[1].data = Rlog.map(x => Math.abs(10 ** x - Rmicro) < 1e6 * 0.2 ? Vmicro : null);
+            noiseChart.update();
+            document.getElementById('micro-note').textContent = `10 MΩ microelectrode thermal floor ≈ ${Vmicro.toFixed(1)} μV rms at this T and Δf.`;
+        }
+
+        document.getElementById('zin').addEventListener('input', updateEcg);
+        document.getElementById('cmrr').addEventListener('input', updateCmrr);
+        document.getElementById('temp').addEventListener('input', updateNoise);
+        document.getElementById('bw').addEventListener('input', updateNoise);
+        updateEcg();
+        updateCmrr();
+        updateNoise();
+    </script>
+</body>
+</html>
